@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Course, ViewState, User } from './types';
-import { fetchCourses, saveCourses, saveSettings, getSettings, getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers, validateConnection } from './services/dataService';
+// 保留 User 相關的服務，但移除 Course 相關的 fetch/save
+import { getSettings, getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers } from './services/dataService';
 import { Dashboard } from './components/Dashboard';
 import { CourseForm } from './components/CourseForm';
 import { BatchImport } from './components/BatchImport';
@@ -9,7 +9,17 @@ import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ChangePassword } from './components/ChangePassword';
 
-type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+// Firebase Imports
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  writeBatch, 
+  query, 
+  orderBy 
+} from 'firebase/firestore';
 
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -18,15 +28,12 @@ const App: React.FC = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingCourse, setEditingCourse] = useState<Course | null>(null);
     const [isBatchImportOpen, setIsBatchImportOpen] = useState(false);
+    
+    // 雖然移除了 Google Sheet 設定，保留此變數以免 UI 報錯，但不再使用
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [scriptUrl, setScriptUrl] = useState('');
 
     // Selection State for Batch Delete
     const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
-
-    // Sync Status State
-    const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-    const [isTestingConnection, setIsTestingConnection] = useState(false);
 
     // Initial Load & Auth Check
     useEffect(() => {
@@ -34,14 +41,34 @@ const App: React.FC = () => {
         if (user) {
             setCurrentUser(user);
         }
+    }, []);
 
-        const loadData = async () => {
-            const data = await fetchCourses();
-            setCourses(data);
-            const settings = getSettings();
-            setScriptUrl(settings.googleScriptUrl || '');
-        };
-        loadData();
+    // --- Firebase Real-time Listener (關鍵修改) ---
+    useEffect(() => {
+        // 取得全域資料庫物件
+        const db = window.db; 
+        if (!db) {
+            console.error("Firebase db not found in window");
+            return;
+        }
+
+        // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
+        // 注意：這會即時同步所有人的操作
+        const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const loadedCourses: Course[] = snapshot.docs.map(doc => {
+                // 將 Firestore 資料轉回 Course 型別
+                return { id: doc.id, ...doc.data() } as Course;
+            });
+            setCourses(loadedCourses);
+        }, (error) => {
+            console.error("Firebase 讀取失敗:", error);
+            alert("讀取資料失敗，請檢查網路連線或 Firebase 權限設定。");
+        });
+
+        // Component Unmount 時取消監聽
+        return () => unsubscribe();
     }, []);
 
     // Clear selection when view changes
@@ -105,58 +132,39 @@ const App: React.FC = () => {
         alert("密碼變更成功！");
     };
 
-    // Helper to handle saving with sync status feedback
-    const performSave = async (newCourses: Course[]) => {
-        setCourses(newCourses); // Optimistic Update
-        setSyncStatus('syncing');
-
-        try {
-            await saveCourses(newCourses);
-            setSyncStatus('success');
-            // Hide success message after 3 seconds
-            setTimeout(() => setSyncStatus('idle'), 3000);
-        } catch (e) {
-            console.error("Sync error:", e);
-            setSyncStatus('error');
-            // Do NOT revert. Just warn.
-            alert("已儲存於本機，但雲端同步失敗。\n請檢查網路連線或 Google Script 設定。");
-        }
-    };
+    // --- Firebase Operations (取代原本的 performSave) ---
 
     const handleDeleteCourse = async (courseId: string) => {
-        console.log("Delete clicked for course:", courseId);
-        if (window.confirm("確定要刪除此課程嗎？")) {
-            console.log("Delete confirmed by user");
-            try {
-                const newCourses = courses.filter(c => c.id !== courseId);
-                console.log("New courses count:", newCourses.length);
-                await performSave(newCourses);
-                console.log("Delete operation completed");
-            } catch (error) {
-                console.error("Delete operation threw error:", error);
-                alert("刪除過程發生錯誤: " + String(error));
-            }
-        } else {
-            console.log("Delete cancelled by user");
+        if (!window.confirm("確定要刪除此課程嗎？")) return;
+
+        try {
+            const db = window.db;
+            // 直接刪除 Firestore 上的文件
+            await deleteDoc(doc(db, "courses", courseId));
+            // 不需要手動 update state，上面的 onSnapshot 會自動更新畫面
+        } catch (error) {
+            console.error("Delete error:", error);
+            alert("刪除失敗: " + String(error));
         }
     };
 
     const handleSaveCourse = async (course: Course) => {
-        let newCourses = [];
-        if (courses.some(c => c.id === course.id)) {
-            newCourses = courses.map(c => c.id === course.id ? course : c);
-        } else {
-            newCourses = [...courses, course];
+        try {
+            const db = window.db;
+            // 使用 setDoc，如果 ID 存在則更新，不存在則建立 (雖然 CourseForm 通常會產生 ID)
+            // 這裡使用 course.id 作為文件的 Key
+            await setDoc(doc(db, "courses", course.id), course);
+            // 同樣不需要手動 setCourses，onSnapshot 會處理
+        } catch (error) {
+            console.error("Save error:", error);
+            alert("儲存失敗: " + String(error));
         }
-        await performSave(newCourses);
     };
 
-    // --- Batch Delete Logic ---
+    // --- Batch Delete Logic (Firebase Version) ---
 
-    // Check if a specific course can be deleted by the current user
     const canDeleteCourse = (course: Course) => {
         if (!currentUser) return false;
-        // General users cannot delete HR-created courses
         return !(currentUser.role === 'GeneralUser' && course.createdBy === 'HR');
     };
 
@@ -172,7 +180,6 @@ const App: React.FC = () => {
 
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
-            // Select all visible courses that the user has permission to delete
             const deletableIds = visibleCourses
                 .filter(c => canDeleteCourse(c))
                 .map(c => c.id);
@@ -187,12 +194,19 @@ const App: React.FC = () => {
 
         if (window.confirm(`確定要刪除選取的 ${selectedCourseIds.size} 筆課程嗎？此動作無法復原。`)) {
             try {
-                const newCourses = courses.filter(c => !selectedCourseIds.has(c.id));
-                await performSave(newCourses);
-                setSelectedCourseIds(new Set()); // Clear selection
+                const db = window.db;
+                const batch = writeBatch(db); // 使用 Batch 寫入以提升效能
+
+                selectedCourseIds.forEach(id => {
+                    const docRef = doc(db, "courses", id);
+                    batch.delete(docRef);
+                });
+
+                await batch.commit(); // 執行批次刪除
+                setSelectedCourseIds(new Set()); // 清空選取狀態
             } catch (error) {
-                console.error("Delete failed:", error);
-                alert("刪除失敗，請稍後再試。");
+                console.error("Batch delete failed:", error);
+                alert("批次刪除失敗，請稍後再試。");
             }
         }
     };
@@ -204,72 +218,22 @@ const App: React.FC = () => {
 
 
     const handleBatchImport = async (importedCourses: Course[]) => {
-        const newCourses = [...courses, ...importedCourses];
-        setIsBatchImportOpen(false);
-        setView('list');
-        await performSave(newCourses);
-    };
+        try {
+            const db = window.db;
+            const batch = writeBatch(db);
 
-    const handleSaveSettings = () => {
-        saveSettings({
-            googleScriptUrl: scriptUrl.trim(), // Trim URL here
-        });
-        setIsSettingsOpen(false);
-        alert("設定已儲存。");
-    };
+            importedCourses.forEach(course => {
+                const docRef = doc(db, "courses", course.id);
+                batch.set(docRef, course);
+            });
 
-    const handleTestConnection = async () => {
-        if (!scriptUrl) {
-            alert("請先輸入網址");
-            return;
-        }
-        setIsTestingConnection(true);
-        const result = await validateConnection(scriptUrl.trim()); // Trim URL here
-        setIsTestingConnection(false);
-
-        if (result.success) {
-            alert("✅ " + result.message + "\n資料同步功能正常。");
-        } else {
-            alert("❌ " + result.message + "\n\n常見原因：\n1. 部署時「誰可以存取」未設為「任何人」。\n2. 網址錯誤 (需以 /exec 結尾)。");
-        }
-    };
-
-    // Render Sync Status Indicator
-    const renderSyncStatus = () => {
-        if (!scriptUrl) return null; // Don't show if not connected
-
-        switch (syncStatus) {
-            case 'syncing':
-                return (
-                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full animate-pulse">
-                        <svg className="animate-spin h-3 w-3 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        雲端同步中...
-                    </div>
-                );
-            case 'success':
-                return (
-                    <div className="flex items-center gap-2 text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                        已同步
-                    </div>
-                );
-            case 'error':
-                return (
-                    <div className="flex items-center gap-2 text-xs font-medium text-red-600 bg-red-50 px-3 py-1 rounded-full cursor-help" title="請檢查網路連線或 Google Script 設定">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></svg>
-                        同步失敗
-                    </div>
-                );
-            default:
-                return (
-                    <div className="text-xs text-slate-400 flex items-center gap-1" title="Google Sheets 連線正常">
-                        <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                        連線中
-                    </div>
-                );
+            await batch.commit();
+            setIsBatchImportOpen(false);
+            setView('list');
+            alert(`成功匯入 ${importedCourses.length} 筆資料`);
+        } catch (e) {
+            console.error("Import failed:", e);
+            alert("匯入失敗");
         }
     };
 
@@ -336,15 +300,6 @@ const App: React.FC = () => {
                 </nav>
 
                 <div className="p-4 border-t border-slate-800 space-y-2">
-                    {currentUser.role === 'SystemAdmin' && (
-                        <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-                            系統設定
-                        </button>
-                    )}
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:text-red-300 transition-colors"
@@ -362,8 +317,12 @@ const App: React.FC = () => {
                         {view === 'dashboard' ? '年度教育訓練總覽' : view === 'list' ? '教育訓練課程清單' : '使用者權限管理'}
                     </h2>
                     <div className="flex gap-3 items-center">
-                        {/* Sync Status Indicator */}
-                        {renderSyncStatus()}
+                        
+                        {/* Firebase Status Indicator */}
+                        <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                             <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                             Firebase 即時同步中
+                        </div>
 
                         {/* Show Add/Import for all users (Admin/HR/GeneralUser), provided they have permission to access the list view */}
                         {view !== 'users' && (
@@ -594,54 +553,6 @@ const App: React.FC = () => {
                     />
                 )
             }
-
-            {/* Settings Modal - only for SystemAdmin */}
-            {
-                isSettingsOpen && currentUser.role === 'SystemAdmin' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
-                            <h3 className="text-lg font-bold text-slate-800 mb-4">系統設定</h3>
-
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Google Sheets (Web App URL)</label>
-                                <input
-                                    type="text"
-                                    value={scriptUrl}
-                                    onChange={(e) => setScriptUrl(e.target.value)}
-                                    placeholder="https://script.google.com/macros/s/..."
-                                    className="w-full rounded-lg border-slate-600 border p-2 text-sm bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-colors"
-                                />
-                                <p className="text-xs text-slate-500 mt-2">
-                                    若要啟用 Google Sheets 同步，請將 Apps Script 發布為 Web App 並貼上網址。
-                                </p>
-                            </div>
-
-                            <div className="flex justify-between gap-2 border-t border-slate-100 pt-4 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={handleTestConnection}
-                                    disabled={isTestingConnection}
-                                    className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg text-sm font-medium flex items-center gap-2"
-                                >
-                                    {isTestingConnection ? (
-                                        <>
-                                            <svg className="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                            測試中...
-                                        </>
-                                    ) : (
-                                        "測試連線"
-                                    )}
-                                </button>
-                                <div className="flex gap-2">
-                                    <button type="button" onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg text-sm">取消</button>
-                                    <button type="button" onClick={handleSaveSettings} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">儲存</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
         </div >
     );
 };
