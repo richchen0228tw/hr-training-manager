@@ -10,15 +10,15 @@ import { UserManagement } from './components/UserManagement';
 import { ChangePassword } from './components/ChangePassword';
 
 // Firebase Imports
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  writeBatch, 
-  query, 
-  orderBy 
+import {
+    collection,
+    onSnapshot,
+    doc,
+    setDoc,
+    deleteDoc,
+    writeBatch,
+    query,
+    orderBy
 } from 'firebase/firestore';
 
 const App: React.FC = () => {
@@ -28,7 +28,7 @@ const App: React.FC = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingCourse, setEditingCourse] = useState<Course | null>(null);
     const [isBatchImportOpen, setIsBatchImportOpen] = useState(false);
-    
+
     // 雖然移除了 Google Sheet 設定，保留此變數以免 UI 報錯，但不再使用
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -46,7 +46,7 @@ const App: React.FC = () => {
     // --- Firebase Real-time Listener (關鍵修改) ---
     useEffect(() => {
         // 取得全域資料庫物件
-        const db = window.db; 
+        const db = window.db;
         if (!db) {
             console.error("Firebase db not found in window");
             return;
@@ -317,11 +317,11 @@ const App: React.FC = () => {
                         {view === 'dashboard' ? '年度教育訓練總覽' : view === 'list' ? '教育訓練課程清單' : '使用者權限管理'}
                     </h2>
                     <div className="flex gap-3 items-center">
-                        
+
                         {/* Firebase Status Indicator */}
                         <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                             <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                             Firebase 即時同步中
+                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                            Firebase 即時同步中
                         </div>
 
                         {/* Show Add/Import for all users (Admin/HR/GeneralUser), provided they have permission to access the list view */}
