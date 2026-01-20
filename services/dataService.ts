@@ -112,7 +112,14 @@ export { type AppSettings };
 
 export const getSettings = (): AppSettings => {
   const saved = localStorage.getItem(SETTINGS_KEY);
-  return saved ? JSON.parse(saved) : { googleScriptUrl: '' };
+  const defaultUrl = 'https://script.google.com/macros/s/AKfycbwvTVvUr_2Sjyh8qNbpd80vThaZx6Z_UrB5HhyH3E0JTBTR6IdtMWNeZSLfTMUe0NKPIg/exec';
+
+  if (saved) {
+    const settings = JSON.parse(saved);
+    // Use default if empty
+    return { ...settings, googleScriptUrl: settings.googleScriptUrl || defaultUrl };
+  }
+  return { googleScriptUrl: defaultUrl };
 };
 
 export const saveSettings = (settings: AppSettings) => {
