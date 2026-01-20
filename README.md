@@ -21,19 +21,21 @@ View your app in AI Studio: https://ai.studio/apps/drive/1YqQhcAuzUkj4ymYWWPHLnO
 
 ## Deploy to GitHub Pages
 
-To deploy this application to GitHub Pages automatically using the configured GitHub Action:
+This project is configured to automatically deploy to GitHub Pages using GitHub Actions.
 
-1.  **Configure Repository Secrets:**
-    The application requires environment variables defined in `.env.example` to be set as secrets in your repository.
-    *   Go to your GitHub repository **Settings** > **Secrets and variables** > **Actions**.
-    *   Click **New repository secret**.
-    *   Add `GEMINI_API_KEY` (Refer to `.env.example` for the variable name).
-    *   Value: Your actual Gemini API Key.
+### 1. Configure Secrets
+The application requires environment variables defined in `.env.example`.
+1. Go to your repository's **Settings** > **Secrets and variables** > **Actions**.
+2. Click **New repository secret**.
+3. Add the following secret (refer to `.env.example`):
+   - Name: `GEMINI_API_KEY`
+   - Value: Your actual Gemini API key
 
-2.  **Enable GitHub Pages:**
-    *   Go to **Settings** > **Pages**.
-    *   Under **Build and deployment** > **Source**, select **GitHub Actions**.
+### 2. Enable GitHub Pages
+1. Go to **Settings** > **Pages**.
+2. Under **Build and deployment** > **Source**, select **GitHub Actions**.
 
-3.  **Trigger Deployment:**
-    *   Push your changes to the `main` branch.
-    *   The deployment workflow will start automatically. You can check its progress in the **Actions** tab.
+### 3. Trigger Deployment
+1. Push your changes to the `main` branch.
+2. The Action will automatically build and deploy your app.
+3. Track progress in the **Actions** tab.

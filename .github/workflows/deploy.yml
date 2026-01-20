@@ -35,6 +35,8 @@ jobs:
 
       - name: Build
         env:
+          # Make sure to set this secret in your repository settings
+          # Ref: .env.example
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npm run build
 
