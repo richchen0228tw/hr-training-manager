@@ -124,7 +124,12 @@ export const validateConnection = async (url: string): Promise<{ success: boolea
   const targetUrl = url.trim();
   if (!targetUrl) return { success: false, message: "網址為空" };
   // Check if URL contains /exec (query params might follow)
-  if (!targetUrl.includes('/exec')) return { success: false, message: "網址格式錯誤 (需包含 /exec)" };
+  if (!targetUrl.includes('/exec')) {
+    if (targetUrl.includes('docs.google.com/spreadsheets')) {
+      return { success: false, message: "這是試算表網址，請使用 Apps Script 發布後的 Web App 網址 (以 /exec 結尾)" };
+    }
+    return { success: false, message: "網址格式錯誤 (需以 /exec 結尾)" };
+  }
 
   try {
     // Attempt 1: Standard GET with 'omit' credentials
