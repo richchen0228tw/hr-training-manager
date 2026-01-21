@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Course, ViewState, User } from './types';
 // 保留 User 相關的服務，但移除 Course 相關的 fetch/save
-import { getSettings, getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers, fetchCourses, saveCourses } from './services/dataService';
+import { getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers } from './services/dataService';
 import { Dashboard } from './components/Dashboard';
 import { CourseForm } from './components/CourseForm';
 import { BatchImport } from './components/BatchImport';
 import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ChangePassword } from './components/ChangePassword';
-// Import initialized Firestore instance
-import { db, isFirebaseInitialized } from './services/firebase';
 
 // Firebase Imports
 import {
@@ -31,9 +29,6 @@ const App: React.FC = () => {
     const [editingCourse, setEditingCourse] = useState<Course | null>(null);
     const [isBatchImportOpen, setIsBatchImportOpen] = useState(false);
 
-    // 雖然移除了 Google Sheet 設定，保留此變數以免 UI 報錯，但不再使用
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
     // Selection State for Batch Delete
     const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
 
@@ -46,32 +41,32 @@ const App: React.FC = () => {
     }, []);
 
     // --- Firebase Real-time Listener (關鍵修改) ---
-    // --- Firebase Real-time Listener (With Local Fallback) ---
     useEffect(() => {
-        if (isFirebaseInitialized) {
-            // 取得全域資料庫物件
-            // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
-            const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
-
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                const loadedCourses: Course[] = snapshot.docs.map(doc => {
-                    return { id: doc.id, ...doc.data() } as Course;
-                });
-                setCourses(loadedCourses);
-            }, (error) => {
-                console.error("Firebase 讀取失敗:", error);
-                // Fallback probably not needed here if successful init, but safe to ignore
-            });
-            return () => unsubscribe();
-        } else {
-            // Local Mode: Load from LocalStorage
-            console.warn("Firebase not initialized. Running in Local Mode.");
-            fetchCourses().then(data => {
-                // Ensure data is sorted by startDate locally
-                const sorted = [...data].sort((a, b) => a.startDate.localeCompare(b.startDate));
-                setCourses(sorted);
-            });
+        // 取得全域資料庫物件
+        const db = window.db;
+        if (!db) {
+            console.error("App.tsx: Firebase db not found in window");
+            return;
         }
+        console.log("App.tsx: 開始監聽 Firebase 資料...");
+
+        // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
+        const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            console.log("App.tsx: 收到資料更新，筆數:", snapshot.docs.length);
+            const loadedCourses: Course[] = snapshot.docs.map(doc => {
+                // 將 Firestore 資料轉回 Course 型別
+                return { id: doc.id, ...doc.data() } as Course;
+            });
+            setCourses(loadedCourses);
+        }, (error) => {
+            console.error("Firebase 讀取失敗:", error);
+            alert("讀取資料失敗，請檢查網路連線或 Firebase 權限設定。");
+        });
+
+        // Component Unmount 時取消監聽
+        return () => unsubscribe();
     }, []);
 
     // Clear selection when view changes
@@ -135,20 +130,14 @@ const App: React.FC = () => {
         alert("密碼變更成功！");
     };
 
-    // --- Firebase Operations (取代原本的 performSave) ---
+    // --- Firebase Operations ---
 
     const handleDeleteCourse = async (courseId: string) => {
         if (!window.confirm("確定要刪除此課程嗎？")) return;
 
         try {
-            if (isFirebaseInitialized) {
-                await deleteDoc(doc(db, "courses", courseId));
-            } else {
-                // Local Mode
-                const newCourses = courses.filter(c => c.id !== courseId);
-                await saveCourses(newCourses);
-                setCourses(newCourses);
-            }
+            const db = window.db;
+            await deleteDoc(doc(db, "courses", courseId));
         } catch (error) {
             console.error("Delete error:", error);
             alert("刪除失敗: " + String(error));
@@ -157,29 +146,13 @@ const App: React.FC = () => {
 
     const handleSaveCourse = async (course: Course) => {
         try {
-            if (isFirebaseInitialized) {
-                await setDoc(doc(db, "courses", course.id), course);
-            } else {
-                // Local Mode
-                const existingIndex = courses.findIndex(c => c.id === course.id);
-                let newCourses = [...courses];
-                if (existingIndex >= 0) {
-                    newCourses[existingIndex] = course;
-                } else {
-                    newCourses.push(course);
-                }
-                // Sort by date
-                newCourses.sort((a, b) => a.startDate.localeCompare(b.startDate));
-                await saveCourses(newCourses);
-                setCourses(newCourses);
-            }
+            const db = window.db;
+            await setDoc(doc(db, "courses", course.id), course);
         } catch (error) {
             console.error("Save error:", error);
             alert("儲存失敗: " + String(error));
         }
     };
-
-    // --- Batch Delete Logic (Firebase Version) ---
 
     const canDeleteCourse = (course: Course) => {
         if (!currentUser) return false;
@@ -212,19 +185,15 @@ const App: React.FC = () => {
 
         if (window.confirm(`確定要刪除選取的 ${selectedCourseIds.size} 筆課程嗎？此動作無法復原。`)) {
             try {
-                if (isFirebaseInitialized) {
-                    const batch = writeBatch(db);
-                    selectedCourseIds.forEach(id => {
-                        const docRef = doc(db, "courses", id);
-                        batch.delete(docRef);
-                    });
-                    await batch.commit();
-                } else {
-                    // Local Mode
-                    const newCourses = courses.filter(c => !selectedCourseIds.has(c.id));
-                    await saveCourses(newCourses);
-                    setCourses(newCourses);
-                }
+                const db = window.db;
+                const batch = writeBatch(db);
+
+                selectedCourseIds.forEach(id => {
+                    const docRef = doc(db, "courses", id);
+                    batch.delete(docRef);
+                });
+
+                await batch.commit();
                 setSelectedCourseIds(new Set());
             } catch (error) {
                 console.error("Batch delete failed:", error);
@@ -233,7 +202,6 @@ const App: React.FC = () => {
         }
     };
 
-    // Determine "Select All" checkbox state
     const deletableCoursesCount = visibleCourses.filter(c => canDeleteCourse(c)).length;
     const isAllSelected = deletableCoursesCount > 0 && selectedCourseIds.size === deletableCoursesCount;
     const isIndeterminate = selectedCourseIds.size > 0 && selectedCourseIds.size < deletableCoursesCount;
@@ -241,42 +209,34 @@ const App: React.FC = () => {
 
     const handleBatchImport = async (importedCourses: Course[]) => {
         try {
-            if (isFirebaseInitialized) {
-                const batch = writeBatch(db);
-                importedCourses.forEach(course => {
-                    const docRef = doc(db, "courses", course.id);
-                    batch.set(docRef, course);
-                });
-                await batch.commit();
-            } else {
-                // Local Mode
-                const newCourses = [...courses, ...importedCourses];
-                newCourses.sort((a, b) => a.startDate.localeCompare(b.startDate));
-                await saveCourses(newCourses);
-                setCourses(newCourses);
-            }
-            return true;
+            const db = window.db;
+            const batch = writeBatch(db);
+
+            importedCourses.forEach(course => {
+                const docRef = doc(db, "courses", course.id);
+                batch.set(docRef, course);
+            });
+
+            await batch.commit();
+            setIsBatchImportOpen(false);
+            setView('list');
+            alert(`成功匯入 ${importedCourses.length} 筆資料`);
         } catch (e) {
             console.error("Import failed:", e);
-            throw e;
+            alert("匯入失敗");
         }
     };
 
-    // 1. If not logged in, show Login
     if (!currentUser) {
         return <Login onLoginSuccess={handleLoginSuccess} />;
     }
 
-    // 2. If logged in but password change required, show ChangePassword
     if (currentUser.mustChangePassword) {
         return <ChangePassword onPasswordChange={handleForcePasswordChange} onLogout={handleLogout} />;
     }
 
-    // 3. Normal App Interface
     return (
         <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 font-sans text-slate-900">
-
-            {/* Sidebar Navigation */}
             <aside className="w-full md:w-64 bg-slate-900 text-white flex flex-col shrink-0">
                 <div className="p-6 border-b border-slate-800 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500"><path d="M22 10v6M2 10v6" /><path d="M20 2a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" /><path d="M12 4v16" /></svg>
@@ -312,7 +272,6 @@ const App: React.FC = () => {
                         課程列表
                     </button>
 
-                    {/* User Management - Only for SystemAdmin */}
                     {currentUser.role === 'SystemAdmin' && (
                         <button
                             onClick={() => setView('users')}
@@ -335,34 +294,25 @@ const App: React.FC = () => {
                 </div>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 h-screen overflow-y-auto">
                 <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4 md:gap-0">
                     <h2 className="text-xl font-bold text-slate-800">
                         {view === 'dashboard' ? '年度教育訓練總覽' : view === 'list' ? '教育訓練課程清單' : '使用者權限管理'}
                     </h2>
                     <div className="flex gap-3 items-center">
-
-                        {/* Firebase Status Indicator */}
-                        <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full border ${isFirebaseInitialized
-                            ? 'text-amber-600 bg-amber-50 border-amber-100'
-                            : 'text-slate-600 bg-slate-100 border-slate-200'
-                            }`}>
-                            <div className={`w-2 h-2 rounded-full ${isFirebaseInitialized ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`}></div>
-                            {isFirebaseInitialized ? 'Firebase 即時同步中' : '本機模式 (資料僅存於瀏覽器)'}
+                        <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                            Firebase 即時同步中
                         </div>
 
-                        {/* Show Add/Import for all users (Admin/HR/GeneralUser), provided they have permission to access the list view */}
                         {view !== 'users' && (
                             <>
-                                {/* Batch Delete Button - Visible when items selected */}
                                 {selectedCourseIds.size > 0 && (
                                     <button
                                         type="button"
                                         onClick={handleBatchDelete}
                                         className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-500/20 transition-all active:scale-95 font-medium text-sm animate-fade-in"
                                     >
-                                        <svg className="pointer-events-none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></svg>
                                         刪除 ({selectedCourseIds.size})
                                     </button>
                                 )}
@@ -372,7 +322,6 @@ const App: React.FC = () => {
                                     onClick={() => setIsBatchImportOpen(true)}
                                     className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg shadow-md shadow-slate-500/20 transition-all active:scale-95 font-medium text-sm"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M3 15h6" /><path d="M6 12v6" /></svg>
                                     整批匯入
                                 </button>
                                 <button
@@ -380,7 +329,6 @@ const App: React.FC = () => {
                                     onClick={() => { setEditingCourse(null); setIsFormOpen(true); }}
                                     className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg shadow-md shadow-primary-500/20 transition-all active:scale-95 font-medium text-sm"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
                                     新增
                                 </button>
                             </>
@@ -421,7 +369,6 @@ const App: React.FC = () => {
                                                                 ref={input => { if (input) input.indeterminate = isIndeterminate; }}
                                                                 onChange={handleSelectAll}
                                                                 className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                                                                title="全選 (僅限有權限刪除的項目)"
                                                             />
                                                         </th>
                                                         <th className="p-4 font-semibold min-w-[200px]">課程名稱</th>
@@ -439,7 +386,6 @@ const App: React.FC = () => {
                                                 <tbody className="divide-y divide-slate-50 text-sm">
                                                     {group.courses.map(course => {
                                                         const canDelete = canDeleteCourse(course);
-
                                                         return (
                                                             <tr
                                                                 key={course.id}
@@ -462,16 +408,6 @@ const App: React.FC = () => {
                                                                 <td className="p-4">
                                                                     <div className="font-semibold text-slate-800">{course.name}</div>
                                                                     <div className="text-xs text-slate-500 mt-1 truncate max-w-[200px]">{course.objective}</div>
-                                                                    {course.trainingType === 'External' && course.trainees && (
-                                                                        <div className="mt-2 flex flex-wrap gap-1">
-                                                                            <span className="text-[10px] text-slate-400 mr-1">受訓人員:</span>
-                                                                            {course.trainees.split(/[,|，、\n]/).filter(t => t.trim()).map((t, i) => (
-                                                                                <span key={i} className="inline-block px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px]">
-                                                                                    {t.trim()}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
                                                                 </td>
                                                                 <td className="p-4">
                                                                     <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${course.trainingType === 'External'
@@ -515,11 +451,6 @@ const App: React.FC = () => {
                                                                         }`}>
                                                                         {course.status === 'Completed' ? '已完成' : course.status === 'Cancelled' ? '已取消' : '規劃中'}
                                                                     </span>
-                                                                    {course.status === 'Cancelled' && course.cancellationReason && (
-                                                                        <div className="text-xs text-red-500 mt-2 max-w-[120px] mx-auto break-words bg-red-50 p-1 rounded border border-red-100" title={course.cancellationReason}>
-                                                                            {course.cancellationReason}
-                                                                        </div>
-                                                                    )}
                                                                 </td>
                                                                 <td className="p-4 text-right">
                                                                     <div className="flex justify-end gap-2">
@@ -531,7 +462,6 @@ const App: React.FC = () => {
                                                                                     handleDeleteCourse(course.id);
                                                                                 }}
                                                                                 className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                                title="刪除"
                                                                             >
                                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></svg>
                                                                             </button>
@@ -544,7 +474,6 @@ const App: React.FC = () => {
                                                                                 setIsFormOpen(true);
                                                                             }}
                                                                             className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                                                                            title="編輯"
                                                                         >
                                                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
                                                                         </button>
@@ -575,7 +504,7 @@ const App: React.FC = () => {
             {isBatchImportOpen && (
                 <BatchImport
                     onImport={handleBatchImport}
-                    onCancel={() => { setIsBatchImportOpen(false); setView('list'); }}
+                    onCancel={() => setIsBatchImportOpen(false)}
                     currentUser={currentUser}
                 />
             )}
