@@ -8,6 +8,8 @@ import { BatchImport } from './components/BatchImport';
 import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ChangePassword } from './components/ChangePassword';
+// Import initialized Firestore instance
+import { db } from './services/firebase';
 
 // Firebase Imports
 import {
@@ -46,12 +48,6 @@ const App: React.FC = () => {
     // --- Firebase Real-time Listener (關鍵修改) ---
     useEffect(() => {
         // 取得全域資料庫物件
-        const db = window.db;
-        if (!db) {
-            console.error("Firebase db not found in window");
-            return;
-        }
-
         // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
         // 注意：這會即時同步所有人的操作
         const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
@@ -138,7 +134,6 @@ const App: React.FC = () => {
         if (!window.confirm("確定要刪除此課程嗎？")) return;
 
         try {
-            const db = window.db;
             // 直接刪除 Firestore 上的文件
             await deleteDoc(doc(db, "courses", courseId));
             // 不需要手動 update state，上面的 onSnapshot 會自動更新畫面
@@ -150,7 +145,6 @@ const App: React.FC = () => {
 
     const handleSaveCourse = async (course: Course) => {
         try {
-            const db = window.db;
             // 使用 setDoc，如果 ID 存在則更新，不存在則建立 (雖然 CourseForm 通常會產生 ID)
             // 這裡使用 course.id 作為文件的 Key
             await setDoc(doc(db, "courses", course.id), course);
@@ -194,7 +188,6 @@ const App: React.FC = () => {
 
         if (window.confirm(`確定要刪除選取的 ${selectedCourseIds.size} 筆課程嗎？此動作無法復原。`)) {
             try {
-                const db = window.db;
                 const batch = writeBatch(db); // 使用 Batch 寫入以提升效能
 
                 selectedCourseIds.forEach(id => {
@@ -219,7 +212,6 @@ const App: React.FC = () => {
 
     const handleBatchImport = async (importedCourses: Course[]) => {
         try {
-            const db = window.db;
             const batch = writeBatch(db);
 
             importedCourses.forEach(course => {
