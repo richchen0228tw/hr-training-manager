@@ -150,7 +150,12 @@ export const BatchImport: React.FC<BatchImportProps> = ({ onImport, onCancel, cu
     try {
       setIsImporting(true);
       await onImport(previewData);
-      setStep('result');
+
+      if (failedItems.length === 0) {
+        onCancel();
+      } else {
+        setStep('result');
+      }
     } catch (e) {
       alert("匯入發生錯誤");
     } finally {
@@ -415,8 +420,8 @@ export const BatchImport: React.FC<BatchImportProps> = ({ onImport, onCancel, cu
                 onClick={handleConfirmImport}
                 disabled={previewData.length === 0 || isImporting}
                 className={`px-5 py-2 rounded-lg text-white shadow-md transition-all flex items-center gap-2 ${previewData.length > 0
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-slate-400 cursor-not-allowed'
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-slate-400 cursor-not-allowed'
                   }`}
               >
                 {isImporting ? (
