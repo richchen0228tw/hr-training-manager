@@ -14,12 +14,8 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-// 檢查資料庫連線
-if (window.db) {
-  console.log("✅ index.tsx: React 已偵測到 Firebase 資料庫連線");
-} else {
-  console.warn("⚠️ index.tsx: 尚未偵測到 window.db，請確認 index.html 的 Firebase 設定正確");
-}
+// 檢查資料庫連線 (移到 render 之後檢查，避免執行順序問題)
+// 我們主要依賴 App.tsx 裡的 useEffect 來讀取 db，這裡只是輔助檢查
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
