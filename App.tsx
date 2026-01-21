@@ -535,13 +535,13 @@ const App: React.FC = () => {
                 currentUser={currentUser}
             />
 
-            isBatchImportOpen && (
-            <BatchImport
-                onImport={handleBatchImport}
-                onCancel={() => { setIsBatchImportOpen(false); setView('list'); }}
-                currentUser={currentUser}
-            />
-            )
+            {isBatchImportOpen && (
+                <BatchImport
+                    onImport={handleBatchImport}
+                    onCancel={() => { setIsBatchImportOpen(false); setView('list'); }}
+                    currentUser={currentUser}
+                />
+            )}
         </div >
     );
 };
