@@ -220,12 +220,11 @@ const App: React.FC = () => {
             });
 
             await batch.commit();
-            setIsBatchImportOpen(false);
             setView('list');
-            alert(`成功匯入 ${importedCourses.length} 筆資料`);
+            return true;
         } catch (e) {
             console.error("Import failed:", e);
-            alert("匯入失敗");
+            throw e;
         }
     };
 
