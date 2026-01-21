@@ -432,8 +432,8 @@ export const BatchImport: React.FC<BatchImportProps> = ({ onImport, onCancel, cu
           )}
 
           {step === 'result' && (
-            <button onClick={onCancel} className="px-6 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-900 shadow-md transition-colors">
-              關閉視窗
+            <button onClick={onCancel} className="px-5 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 shadow-md transition-colors font-medium">
+              匯入完成
             </button>
           )}
         </div>
