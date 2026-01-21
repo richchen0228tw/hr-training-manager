@@ -220,7 +220,12 @@ const App: React.FC = () => {
             });
 
             await batch.commit();
-            setView('list');
+
+            // Delay view switch to ensure UI updates don't conflict with modal state transition
+            setTimeout(() => {
+                setView('list');
+            }, 100);
+
             return true;
         } catch (e) {
             console.error("Import failed:", e);
