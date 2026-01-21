@@ -221,11 +221,6 @@ const App: React.FC = () => {
 
             await batch.commit();
 
-            // Delay view switch to ensure UI updates don't conflict with modal state transition
-            setTimeout(() => {
-                setView('list');
-            }, 100);
-
             return true;
         } catch (e) {
             console.error("Import failed:", e);
@@ -540,15 +535,13 @@ const App: React.FC = () => {
                 currentUser={currentUser}
             />
 
-            {
-                isBatchImportOpen && (
-                    <BatchImport
-                        onImport={handleBatchImport}
-                        onCancel={() => setIsBatchImportOpen(false)}
-                        currentUser={currentUser}
-                    />
-                )
-            }
+            isBatchImportOpen && (
+            <BatchImport
+                onImport={handleBatchImport}
+                onCancel={() => { setIsBatchImportOpen(false); setView('list'); }}
+                currentUser={currentUser}
+            />
+            )
         </div >
     );
 };

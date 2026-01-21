@@ -150,12 +150,7 @@ export const BatchImport: React.FC<BatchImportProps> = ({ onImport, onCancel, cu
     try {
       setIsImporting(true);
       await onImport(previewData);
-
-      if (failedItems.length === 0) {
-        onCancel();
-      } else {
-        setStep('result');
-      }
+      setStep('result');
     } catch (e) {
       alert("匯入發生錯誤");
     } finally {
