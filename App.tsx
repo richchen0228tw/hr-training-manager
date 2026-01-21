@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Course, ViewState, User } from './types';
 // 保留 User 相關的服務，但移除 Course 相關的 fetch/save
-import { getSettings, getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers } from './services/dataService';
+import { getSettings, getCurrentUser, logout, getVisibleCourses, fetchUsers, saveUsers, fetchCourses, saveCourses } from './services/dataService';
 import { Dashboard } from './components/Dashboard';
 import { CourseForm } from './components/CourseForm';
 import { BatchImport } from './components/BatchImport';
@@ -9,7 +9,7 @@ import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ChangePassword } from './components/ChangePassword';
 // Import initialized Firestore instance
-import { db } from './services/firebase';
+import { db, isFirebaseInitialized } from './services/firebase';
 
 // Firebase Imports
 import {
@@ -46,25 +46,32 @@ const App: React.FC = () => {
     }, []);
 
     // --- Firebase Real-time Listener (關鍵修改) ---
+    // --- Firebase Real-time Listener (With Local Fallback) ---
     useEffect(() => {
-        // 取得全域資料庫物件
-        // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
-        // 注意：這會即時同步所有人的操作
-        const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
+        if (isFirebaseInitialized) {
+            // 取得全域資料庫物件
+            // 建立查詢：監聽 'courses' 集合，並依照開始日期排序
+            const q = query(collection(db, "courses"), orderBy("startDate", "asc"));
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const loadedCourses: Course[] = snapshot.docs.map(doc => {
-                // 將 Firestore 資料轉回 Course 型別
-                return { id: doc.id, ...doc.data() } as Course;
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                const loadedCourses: Course[] = snapshot.docs.map(doc => {
+                    return { id: doc.id, ...doc.data() } as Course;
+                });
+                setCourses(loadedCourses);
+            }, (error) => {
+                console.error("Firebase 讀取失敗:", error);
+                // Fallback probably not needed here if successful init, but safe to ignore
             });
-            setCourses(loadedCourses);
-        }, (error) => {
-            console.error("Firebase 讀取失敗:", error);
-            alert("讀取資料失敗，請檢查網路連線或 Firebase 權限設定。");
-        });
-
-        // Component Unmount 時取消監聽
-        return () => unsubscribe();
+            return () => unsubscribe();
+        } else {
+            // Local Mode: Load from LocalStorage
+            console.warn("Firebase not initialized. Running in Local Mode.");
+            fetchCourses().then(data => {
+                // Ensure data is sorted by startDate locally
+                const sorted = [...data].sort((a, b) => a.startDate.localeCompare(b.startDate));
+                setCourses(sorted);
+            });
+        }
     }, []);
 
     // Clear selection when view changes
@@ -134,9 +141,14 @@ const App: React.FC = () => {
         if (!window.confirm("確定要刪除此課程嗎？")) return;
 
         try {
-            // 直接刪除 Firestore 上的文件
-            await deleteDoc(doc(db, "courses", courseId));
-            // 不需要手動 update state，上面的 onSnapshot 會自動更新畫面
+            if (isFirebaseInitialized) {
+                await deleteDoc(doc(db, "courses", courseId));
+            } else {
+                // Local Mode
+                const newCourses = courses.filter(c => c.id !== courseId);
+                await saveCourses(newCourses);
+                setCourses(newCourses);
+            }
         } catch (error) {
             console.error("Delete error:", error);
             alert("刪除失敗: " + String(error));
@@ -145,10 +157,22 @@ const App: React.FC = () => {
 
     const handleSaveCourse = async (course: Course) => {
         try {
-            // 使用 setDoc，如果 ID 存在則更新，不存在則建立 (雖然 CourseForm 通常會產生 ID)
-            // 這裡使用 course.id 作為文件的 Key
-            await setDoc(doc(db, "courses", course.id), course);
-            // 同樣不需要手動 setCourses，onSnapshot 會處理
+            if (isFirebaseInitialized) {
+                await setDoc(doc(db, "courses", course.id), course);
+            } else {
+                // Local Mode
+                const existingIndex = courses.findIndex(c => c.id === course.id);
+                let newCourses = [...courses];
+                if (existingIndex >= 0) {
+                    newCourses[existingIndex] = course;
+                } else {
+                    newCourses.push(course);
+                }
+                // Sort by date
+                newCourses.sort((a, b) => a.startDate.localeCompare(b.startDate));
+                await saveCourses(newCourses);
+                setCourses(newCourses);
+            }
         } catch (error) {
             console.error("Save error:", error);
             alert("儲存失敗: " + String(error));
@@ -188,15 +212,20 @@ const App: React.FC = () => {
 
         if (window.confirm(`確定要刪除選取的 ${selectedCourseIds.size} 筆課程嗎？此動作無法復原。`)) {
             try {
-                const batch = writeBatch(db); // 使用 Batch 寫入以提升效能
-
-                selectedCourseIds.forEach(id => {
-                    const docRef = doc(db, "courses", id);
-                    batch.delete(docRef);
-                });
-
-                await batch.commit(); // 執行批次刪除
-                setSelectedCourseIds(new Set()); // 清空選取狀態
+                if (isFirebaseInitialized) {
+                    const batch = writeBatch(db);
+                    selectedCourseIds.forEach(id => {
+                        const docRef = doc(db, "courses", id);
+                        batch.delete(docRef);
+                    });
+                    await batch.commit();
+                } else {
+                    // Local Mode
+                    const newCourses = courses.filter(c => !selectedCourseIds.has(c.id));
+                    await saveCourses(newCourses);
+                    setCourses(newCourses);
+                }
+                setSelectedCourseIds(new Set());
             } catch (error) {
                 console.error("Batch delete failed:", error);
                 alert("批次刪除失敗，請稍後再試。");
@@ -212,15 +241,20 @@ const App: React.FC = () => {
 
     const handleBatchImport = async (importedCourses: Course[]) => {
         try {
-            const batch = writeBatch(db);
-
-            importedCourses.forEach(course => {
-                const docRef = doc(db, "courses", course.id);
-                batch.set(docRef, course);
-            });
-
-            await batch.commit();
-
+            if (isFirebaseInitialized) {
+                const batch = writeBatch(db);
+                importedCourses.forEach(course => {
+                    const docRef = doc(db, "courses", course.id);
+                    batch.set(docRef, course);
+                });
+                await batch.commit();
+            } else {
+                // Local Mode
+                const newCourses = [...courses, ...importedCourses];
+                newCourses.sort((a, b) => a.startDate.localeCompare(b.startDate));
+                await saveCourses(newCourses);
+                setCourses(newCourses);
+            }
             return true;
         } catch (e) {
             console.error("Import failed:", e);
@@ -310,9 +344,12 @@ const App: React.FC = () => {
                     <div className="flex gap-3 items-center">
 
                         {/* Firebase Status Indicator */}
-                        <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                            Firebase 即時同步中
+                        <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full border ${isFirebaseInitialized
+                            ? 'text-amber-600 bg-amber-50 border-amber-100'
+                            : 'text-slate-600 bg-slate-100 border-slate-200'
+                            }`}>
+                            <div className={`w-2 h-2 rounded-full ${isFirebaseInitialized ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`}></div>
+                            {isFirebaseInitialized ? 'Firebase 即時同步中' : '本機模式 (資料僅存於瀏覽器)'}
                         </div>
 
                         {/* Show Add/Import for all users (Admin/HR/GeneralUser), provided they have permission to access the list view */}

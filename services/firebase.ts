@@ -13,7 +13,25 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let app;
+let db: any; // Use any to allow fallback mock or null
+let isFirebaseInitialized = false;
 
-export { db };
+try {
+    // Basic validation: Check if required keys are present
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+        throw new Error("Missing Firebase configuration keys");
+    }
+
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    isFirebaseInitialized = true;
+    console.log("✅ Firebase initialized successfully");
+} catch (e) {
+    console.warn("⚠️ Firebase Initialization Failed or Config Missing. Falling back to Local Mode. Error:", e);
+    // Provide a dummy db object to prevent immediate crashes, 
+    // but app logic should check isFirebaseInitialized
+    db = null;
+}
+
+export { db, isFirebaseInitialized };

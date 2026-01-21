@@ -260,9 +260,9 @@ export const saveCourses = async (courses: Course[]): Promise<void> => {
       // Sync success, clear dirty flag
       localStorage.setItem(DIRTY_KEY, 'false');
     } catch (e) {
-      console.error("Failed to save to Google Sheet", e);
-      // Dirty flag remains true
-      throw e; // Throw so UI knows sync failed
+      console.warn("Failed to save to Google Sheet (Cloud Sync skipped). Local data is saved.", e);
+      // Do not throw. We want the UI to consider this a success (Local Save).
+      // Dirty flag remains true so we can try syncing later if needed.
     }
   } else {
     // No URL configured, assuming local-only mode is "clean" enough or technically "dirty" but valid?
