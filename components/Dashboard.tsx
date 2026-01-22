@@ -65,10 +65,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses }) => {
 
     const filteredCourses = useMemo(() => {
         return courses.filter(course => {
-            // 1. Date Range Filter
-            const courseDate = course.startDate;
-            if (startDate && courseDate < startDate) return false;
-            if (endDate && courseDate > endDate) return false;
+            // 1. Year Filter (if date range is not set, filter by year only)
+            const courseYear = parseInt(course.startDate.substring(0, 4));
+            if (!startDate && !endDate) {
+                // If no date range is set, filter by selected year only
+                if (courseYear !== selectedYear) return false;
+            } else {
+                // Date Range Filter
+                const courseDate = course.startDate;
+                if (startDate && courseDate < startDate) return false;
+                if (endDate && courseDate > endDate) return false;
+            }
 
             // 2. Training Type Filter
             if (selectedType !== 'All') {
@@ -78,7 +85,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses }) => {
 
             return true;
         });
-    }, [courses, startDate, endDate, selectedType]);
+    }, [courses, startDate, endDate, selectedType, selectedYear]);
 
     const trainingTypeData = useMemo(() => {
         let internal = 0;
