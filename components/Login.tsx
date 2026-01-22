@@ -60,11 +60,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     return `${visible}***@${parts[1]}`;
   };
 
-  // --- 修改 2: 忘記密碼邏輯改成 Async/Await ---
+  // --- 修改 2: 忘記密碼邏輯改成 EmailJS ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsResetting(true);
     setForgotMessage('');
+
+    // Check for EmailJS keys
+    const serviceID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+    const templateID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+    const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
 
     try {
       // 從雲端抓取最新使用者列表
@@ -80,21 +85,38 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         const tempPassword = generateTempPassword();
 
-        // 更新使用者資料
+        // 更新使用者資料 (先寫入資料庫，確保密碼已變更)
         const updatedUsers = allUsers.map(u => {
           if (u.id === targetUser.id) {
             return { ...u, password: tempPassword, mustChangePassword: true };
           }
           return u;
         });
-
-        // 等待寫入雲端
         await saveUsers(updatedUsers);
 
-        // 模擬發送郵件 (在 Console 顯示，實際專案需串接 Email Service)
-        console.log(`[Email Service Simulation] To: ${targetUser.email}, Subject: Password Reset, Body: Your temp password is: ${tempPassword}`);
+        // 發送郵件
+        if (serviceID && templateID && publicKey) {
+          // Import dynamically to avoid issues if not installed yet (though we just installed it)
+          const emailjs = await import('@emailjs/browser');
 
-        setForgotMessage(`✅ 已發送重置信件至 ${maskEmail(targetUser.email)}！\n請收取信件以取得臨時密碼。\n(登入後請立即修改密碼)`);
+          await emailjs.send(
+            serviceID,
+            templateID,
+            {
+              to_name: targetUser.name,
+              to_email: targetUser.email,
+              temp_password: tempPassword,
+            },
+            publicKey
+          );
+          setForgotMessage(`✅ 已發送重置信件至 ${maskEmail(targetUser.email)}！\n請收取信件以取得臨時密碼。\n(登入後請立即修改密碼)`);
+        } else {
+          // Fallback for development/simulation
+          console.warn("EmailJS keys missing in .env.local. Falling back to console log simulation.");
+          console.log(`[Email Simulation] To: ${targetUser.email}, Password: ${tempPassword}`);
+          setForgotMessage(`⚠️ 系統尚未設定郵件服務 (EmailJS)。\n臨時密碼已顯示於 Console (F12) 用於測試：\n${tempPassword}`);
+        }
+
       } else {
         setForgotMessage('❌ 找不到此帳號，請確認輸入是否正確。');
       }
