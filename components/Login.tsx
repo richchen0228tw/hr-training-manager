@@ -41,6 +41,25 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  // --- Helper: Generate Random Password ---
+  const generateTempPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let pass = '';
+    for (let i = 0; i < 8; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
+
+  // --- Helper: Mask Email ---
+  const maskEmail = (email: string) => {
+    const parts = email.split('@');
+    if (parts.length < 2) return email;
+    const name = parts[0];
+    const visible = name.length > 2 ? name.substring(0, 2) : name.substring(0, 1);
+    return `${visible}***@${parts[1]}`;
+  };
+
   // --- 修改 2: 忘記密碼邏輯改成 Async/Await ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +72,18 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       const targetUser = allUsers.find(u => u.username === forgotUsername);
 
       if (targetUser) {
-        // Mock Reset Password Logic
+        if (!targetUser.email) {
+          setForgotMessage('❌ 此帳號尚未設定 Email，無法重置密碼，請聯繫管理員。');
+          setIsResetting(false);
+          return;
+        }
+
+        const tempPassword = generateTempPassword();
+
+        // 更新使用者資料
         const updatedUsers = allUsers.map(u => {
           if (u.id === targetUser.id) {
-            return { ...u, password: '123', mustChangePassword: true };
+            return { ...u, password: tempPassword, mustChangePassword: true };
           }
           return u;
         });
@@ -64,7 +91,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         // 等待寫入雲端
         await saveUsers(updatedUsers);
 
-        setForgotMessage(`✅ 已發送重置信件！\n為了方便測試，密碼已重置為「123」。\n請使用新密碼登入並修改。`);
+        // 模擬發送郵件 (在 Console 顯示，實際專案需串接 Email Service)
+        console.log(`[Email Service Simulation] To: ${targetUser.email}, Subject: Password Reset, Body: Your temp password is: ${tempPassword}`);
+
+        setForgotMessage(`✅ 已發送重置信件至 ${maskEmail(targetUser.email)}！\n請收取信件以取得臨時密碼。\n(登入後請立即修改密碼)`);
       } else {
         setForgotMessage('❌ 找不到此帳號，請確認輸入是否正確。');
       }

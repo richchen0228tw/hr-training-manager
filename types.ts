@@ -50,6 +50,7 @@ export interface User {
   name: string;
   role: UserRole;
   permissions: CompanyPermission[];
+  email?: string; // Email for notifications and password recovery
   mustChangePassword?: boolean; // Force user to change password on next login
 }
 
@@ -64,16 +65,16 @@ export const COMPANY_OPTIONS = ['神通', '神資', '神耀', '新達', '肇源'
 
 export const DEPARTMENT_MAPPING: Record<string, string[]> = {
   '神資': [
-    '070-董事長室', 'P00-總經理室', 'PA0-財務處', 'PC0-稽核室', 
-    'PG0-資訊服務研發處', '600-數位科技事業群', '700-行政支援中心', 
+    '070-董事長室', 'P00-總經理室', 'PA0-財務處', 'PC0-稽核室',
+    'PG0-資訊服務研發處', '600-數位科技事業群', '700-行政支援中心',
     'C00-應用系統事業群', 'G00-創新科技事業群', 'K00-智慧交通事業群'
   ],
   '神耀': [
-    'Q0A-董事長室', 'Q00-總經理室', 'QF0-管理處', 'Q01-財會部', 
+    'Q0A-董事長室', 'Q00-總經理室', 'QF0-管理處', 'Q01-財會部',
     'QA0-智能科技中心', 'QB0-智慧聯安事業群', 'QC0-AI創新應用研發中心'
   ],
   '新達': [
-    'ZA0-董事長室', 'Z00-總經理室', 'Z10-統合通訊處', 
+    'ZA0-董事長室', 'Z00-總經理室', 'Z10-統合通訊處',
     'Z20-智能影音處', 'Z30-電力系統處', 'Z70-技術支援處'
   ],
   '神通': ['一般部門'],

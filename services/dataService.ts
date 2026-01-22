@@ -28,6 +28,7 @@ export const fetchUsers = async (): Promise<User[]> => {
       password: '123',
       name: '系統管理員',
       role: 'SystemAdmin',
+      email: 'admin@example.com',
       permissions: [],
       mustChangePassword: false
     }];
