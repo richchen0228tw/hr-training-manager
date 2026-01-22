@@ -39,7 +39,7 @@ const App: React.FC = () => {
 
     // Export Filter State
     const getCurrentYear = () => new Date().getFullYear();
-    const [exportYear, setExportYear] = useState<number>(getCurrentYear());
+    const [exportYear, setExportYear] = useState<number | 'All'>('All');
     const [exportStartDate, setExportStartDate] = useState<string>('');
     const [exportEndDate, setExportEndDate] = useState<string>('');
     const [exportType, setExportType] = useState<string>('All');
@@ -97,8 +97,10 @@ const App: React.FC = () => {
 
         return visibleCourses.filter(course => {
             // Year filter
-            const courseYear = parseInt(course.startDate.substring(0, 4));
-            if (courseYear !== exportYear) return false;
+            if (exportYear !== 'All') {
+                const courseYear = parseInt(course.startDate.substring(0, 4));
+                if (courseYear !== exportYear) return false;
+            }
 
             // Date range filter
             if (exportStartDate && course.startDate < exportStartDate) return false;
@@ -261,7 +263,13 @@ const App: React.FC = () => {
 
     // Handle Year Change for Export Filter
     const handleExportYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newYear = parseInt(e.target.value);
+        const value = e.target.value;
+        if (value === 'All') {
+            setExportYear('All');
+            return;
+        }
+
+        const newYear = parseInt(value);
         setExportYear(newYear);
 
         // Update date range years while preserving month/day
@@ -334,7 +342,9 @@ const App: React.FC = () => {
             ? `${exportStartDate}_`
             : exportEndDate
             ? `_${exportEndDate}`
-            : `${exportYear}年`;
+            : exportYear !== 'All'
+            ? `${exportYear}年`
+            : '全部年度';
         
         const typeStr = exportType !== 'All' ? (exportType === 'Internal' ? '_內訓' : '_外訓') : '';
         link.download = `教育訓練資料_${dateStr}${typeStr}.csv`;
@@ -505,6 +515,7 @@ const App: React.FC = () => {
                                             onChange={handleExportYearChange}
                                             className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5"
                                         >
+                                            <option value="All">全部年度</option>
                                             {Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i).map(year => (
                                                 <option key={year} value={year}>{year}年</option>
                                             ))}
