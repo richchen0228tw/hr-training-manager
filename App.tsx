@@ -21,7 +21,7 @@ import {
     orderBy
 } from 'firebase/firestore';
 
-import { db } from './services/firebase';
+import { db, isFirebaseInitialized } from './services/firebase';
 
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -219,7 +219,7 @@ const App: React.FC = () => {
 
     const handleBatchImport = async (importedCourses: Course[]) => {
         if (!db) {
-            alert("系統尚未連線至 Firebase 資料庫，無法儲存資料。\n請檢查 .env 設定。");
+            alert("系統目前處於「離線模式」，無法連線至資料庫。\n\n請確認：\n1. .env.local 設定檔正確\n2. 伺服器已重新啟動 (請關閉所有終端機後重開)");
             return;
         }
 
@@ -314,10 +314,17 @@ const App: React.FC = () => {
                         {view === 'dashboard' ? '年度教育訓練總覽' : view === 'list' ? '教育訓練課程清單' : '使用者權限管理'}
                     </h2>
                     <div className="flex gap-3 items-center">
-                        <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                            Firebase 即時同步中
-                        </div>
+                        {isFirebaseInitialized ? (
+                            <div className="flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                                Firebase 即時同步中
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200" title="請檢查 .env 設定並重啟伺服器">
+                                <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                                離線預覽模式 (資料將不會儲存)
+                            </div>
+                        )}
 
                         {view !== 'users' && (
                             <>
