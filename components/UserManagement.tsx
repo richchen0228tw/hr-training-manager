@@ -9,7 +9,11 @@ export const UserManagement: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
     useEffect(() => {
-        setUsers(fetchUsers());
+        const loadUsers = async () => {
+            const data = await fetchUsers();
+            setUsers(data);
+        };
+        loadUsers();
     }, []);
 
     const handleEdit = (user: User) => {
@@ -300,7 +304,7 @@ export const UserManagement: React.FC = () => {
                                 </td>
                                 <td className="p-4">
                                     <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'SystemAdmin' ? 'bg-purple-50 text-purple-700' :
-                                            user.role === 'HR' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                        user.role === 'HR' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'
                                         }`}>
                                         {user.role}
                                     </span>

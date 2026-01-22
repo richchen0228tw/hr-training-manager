@@ -114,16 +114,16 @@ const App: React.FC = () => {
         setCurrentUser(null);
     };
 
-    const handleForcePasswordChange = (newPassword: string) => {
+    const handleForcePasswordChange = async (newPassword: string) => {
         if (!currentUser) return;
-        const allUsers = fetchUsers();
+        const allUsers = await fetchUsers();
         const updatedUsers = allUsers.map(u => {
             if (u.id === currentUser.id) {
                 return { ...u, password: newPassword, mustChangePassword: false };
             }
             return u;
         });
-        saveUsers(updatedUsers);
+        await saveUsers(updatedUsers);
         const updatedCurrentUser = { ...currentUser, password: newPassword, mustChangePassword: false };
         setCurrentUser(updatedCurrentUser);
         localStorage.setItem('hr_training_session', JSON.stringify(updatedCurrentUser));
