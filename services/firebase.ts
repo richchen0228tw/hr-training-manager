@@ -12,10 +12,13 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-console.log("Firebase Config Loaded:", {
-    apiKey: firebaseConfig.apiKey ? "Present" : "Missing",
-    projectId: firebaseConfig.projectId ? "Present" : "Missing",
-    fullConfig: firebaseConfig
+console.log("Firebase Config Debug:", {
+    rawApiKey: import.meta.env.VITE_FIREBASE_API_KEY ? "Loaded" : "Not Loaded",
+    rawProjectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ? "Loaded" : "Not Loaded",
+    configObject: {
+        apiKey: firebaseConfig.apiKey || "Missing",
+        projectId: firebaseConfig.projectId || "Missing"
+    }
 });
 
 // Initialize Firebase
