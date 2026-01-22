@@ -206,7 +206,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </div>
             <h3 className="text-lg font-bold text-center text-slate-800 mb-2">忘記密碼</h3>
 
-            {!forgotMessage.includes('✅') ? (
+            {/* Show Form only if no success (✅) AND no warning (⚠️) */}
+            {!forgotMessage.includes('✅') && !forgotMessage.includes('⚠️') ? (
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <p className="text-sm text-slate-600 text-center mb-4">
                   請輸入您的帳號，系統將寄送重置密碼信件給您。
@@ -237,7 +238,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </button>
               </form>
             ) : (
-              <div className="bg-green-50 text-green-700 p-4 rounded-lg text-sm whitespace-pre-line text-center mb-4 border border-green-100">
+              <div className={`p-4 rounded-lg text-sm whitespace-pre-line text-center mb-4 border ${forgotMessage.includes('⚠️') ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-700 border-green-100'}`}>
                 {forgotMessage}
               </div>
             )}
@@ -253,7 +254,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               className="w-full py-2 mt-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
               disabled={isResetting}
             >
-              {forgotMessage.includes('✅') ? '返回登入' : '取消'}
+              {(forgotMessage.includes('✅') || forgotMessage.includes('⚠️')) ? '返回登入' : '取消'}
             </button>
           </div>
         </div>
