@@ -34,6 +34,9 @@ const App: React.FC = () => {
     // Selection State for Batch Delete
     const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
 
+    // Collapsed Months State
+    const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
+
     // Initial Load & Auth Check
     useEffect(() => {
         const user = getCurrentUser();
@@ -216,6 +219,16 @@ const App: React.FC = () => {
     const isAllSelected = deletableCoursesCount > 0 && selectedCourseIds.size === deletableCoursesCount;
     const isIndeterminate = selectedCourseIds.size > 0 && selectedCourseIds.size < deletableCoursesCount;
 
+    const toggleMonth = (month: string) => {
+        const newSet = new Set(collapsedMonths);
+        if (newSet.has(month)) {
+            newSet.delete(month);
+        } else {
+            newSet.add(month);
+        }
+        setCollapsedMonths(newSet);
+    };
+
 
     const handleBatchImport = async (importedCourses: Course[]) => {
         if (!db) {
@@ -374,12 +387,32 @@ const App: React.FC = () => {
                             ) : (
                                 groupedCourses.map(group => (
                                     <div key={group.month} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                        <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex items-center gap-2">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-600"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
-                                            <h3 className="font-bold text-slate-700">{group.month} 月份課程</h3>
-                                            <span className="text-xs text-slate-400 font-normal">({group.courses.length} 堂)</span>
+                                        <div
+                                            className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
+                                            onClick={() => toggleMonth(group.month)}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-600"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
+                                                <h3 className="font-bold text-slate-700">{group.month} 月份課程</h3>
+                                                <span className="text-xs text-slate-400 font-normal">({group.courses.length} 堂)</span>
+                                            </div>
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="20"
+                                                height="20"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                className={`text-slate-400 transition-transform duration-200 ${collapsedMonths.has(group.month) ? '-rotate-90' : 'rotate-0'}`}
+                                            >
+                                                <polyline points="6 9 12 15 18 9" />
+                                            </svg>
                                         </div>
-                                        <div className="overflow-x-auto">
+                                        {/* Collapsible Content */}
+                                        <div className={`overflow-x-auto transition-all duration-300 ${collapsedMonths.has(group.month) ? 'max-h-0 opacity-0' : 'max-h-[2000px] opacity-100'}`}>
                                             <table className="w-full text-left border-collapse">
                                                 <thead>
                                                     <tr className="bg-white text-slate-500 text-xs uppercase tracking-wider border-b border-slate-100">
