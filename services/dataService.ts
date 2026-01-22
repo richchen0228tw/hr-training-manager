@@ -6,13 +6,12 @@ import {
   setDoc,
 } from 'firebase/firestore';
 
+import { db } from './firebase';
+
 // --- Firebase Helper ---
 // 安全地取得 window.db
 const getDB = () => {
-  if (typeof window !== 'undefined' && (window as any).db) {
-    return (window as any).db;
-  }
-  return null;
+  return db || (typeof window !== 'undefined' && (window as any).db) || null;
 };
 
 // --- User Management (Firebase Version) ---

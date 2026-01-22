@@ -21,6 +21,8 @@ import {
     orderBy
 } from 'firebase/firestore';
 
+import { db } from './services/firebase';
+
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [view, setView] = useState<ViewState>('dashboard');
@@ -43,9 +45,8 @@ const App: React.FC = () => {
     // --- Firebase Real-time Listener (關鍵修改) ---
     useEffect(() => {
         // 取得全域資料庫物件
-        const db = window.db;
         if (!db) {
-            console.error("App.tsx: Firebase db not found in window");
+            console.error("App.tsx: Firebase db not initialized");
             return;
         }
         console.log("App.tsx: 開始監聽 Firebase 資料...");
@@ -134,9 +135,12 @@ const App: React.FC = () => {
 
     const handleDeleteCourse = async (courseId: string) => {
         if (!window.confirm("確定要刪除此課程嗎？")) return;
+        if (!db) {
+            alert("資料庫未連線");
+            return;
+        }
 
         try {
-            const db = window.db;
             await deleteDoc(doc(db, "courses", courseId));
         } catch (error) {
             console.error("Delete error:", error);
@@ -145,8 +149,11 @@ const App: React.FC = () => {
     };
 
     const handleSaveCourse = async (course: Course) => {
+        if (!db) {
+            alert("資料庫未連線");
+            return;
+        }
         try {
-            const db = window.db;
             await setDoc(doc(db, "courses", course.id), course);
         } catch (error) {
             console.error("Save error:", error);
@@ -184,8 +191,11 @@ const App: React.FC = () => {
         if (selectedCourseIds.size === 0) return;
 
         if (window.confirm(`確定要刪除選取的 ${selectedCourseIds.size} 筆課程嗎？此動作無法復原。`)) {
+            if (!db) {
+                alert("資料庫未連線");
+                return;
+            }
             try {
-                const db = window.db;
                 const batch = writeBatch(db);
 
                 selectedCourseIds.forEach(id => {
@@ -208,8 +218,12 @@ const App: React.FC = () => {
 
 
     const handleBatchImport = async (importedCourses: Course[]) => {
+        if (!db) {
+            alert("系統尚未連線至 Firebase 資料庫，無法儲存資料。\n請檢查 .env 設定。");
+            return;
+        }
+
         try {
-            const db = window.db;
             const batch = writeBatch(db);
 
             importedCourses.forEach(course => {
@@ -223,7 +237,7 @@ const App: React.FC = () => {
             alert(`成功匯入 ${importedCourses.length} 筆資料`);
         } catch (e) {
             console.error("Import failed:", e);
-            alert("匯入失敗");
+            alert("匯入失敗: " + String(e));
         }
     };
 
