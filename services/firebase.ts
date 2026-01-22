@@ -12,6 +12,12 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+console.log("Firebase Config Loaded:", {
+    apiKey: firebaseConfig.apiKey ? "Present" : "Missing",
+    projectId: firebaseConfig.projectId ? "Present" : "Missing",
+    fullConfig: firebaseConfig
+});
+
 // Initialize Firebase
 let app;
 let db: any; // Use any to allow fallback mock or null
