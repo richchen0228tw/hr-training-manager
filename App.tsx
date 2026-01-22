@@ -37,6 +37,13 @@ const App: React.FC = () => {
     // Collapsed Months State
     const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
 
+    // Export Filter State
+    const getCurrentYear = () => new Date().getFullYear();
+    const [exportYear, setExportYear] = useState<number>(getCurrentYear());
+    const [exportStartDate, setExportStartDate] = useState<string>('');
+    const [exportEndDate, setExportEndDate] = useState<string>('');
+    const [exportType, setExportType] = useState<string>('All');
+
     // Initial Load & Auth Check
     useEffect(() => {
         const user = getCurrentUser();
@@ -84,13 +91,36 @@ const App: React.FC = () => {
         return getVisibleCourses(courses, currentUser);
     }, [courses, currentUser]);
 
+    // Filter courses for export and display
+    const filteredCoursesForList = useMemo(() => {
+        if (view !== 'list') return visibleCourses;
+
+        return visibleCourses.filter(course => {
+            // Year filter
+            const courseYear = parseInt(course.startDate.substring(0, 4));
+            if (courseYear !== exportYear) return false;
+
+            // Date range filter
+            if (exportStartDate && course.startDate < exportStartDate) return false;
+            if (exportEndDate && course.startDate > exportEndDate) return false;
+
+            // Training type filter
+            if (exportType !== 'All') {
+                if (exportType === 'Internal' && course.trainingType !== 'Internal') return false;
+                if (exportType === 'External' && course.trainingType !== 'External') return false;
+            }
+
+            return true;
+        });
+    }, [visibleCourses, view, exportYear, exportStartDate, exportEndDate, exportType]);
+
     // Group Courses by Month for List View
     const groupedCourses = useMemo(() => {
         if (view !== 'list') return [];
 
         const groups: Record<string, Course[]> = {};
 
-        visibleCourses.forEach(course => {
+        filteredCoursesForList.forEach(course => {
             const monthKey = course.startDate.substring(0, 7); // "YYYY-MM"
             if (!groups[monthKey]) {
                 groups[monthKey] = [];
@@ -106,7 +136,7 @@ const App: React.FC = () => {
             // Sort courses within month by startDate ascending
             courses: groups[month].sort((a, b) => a.startDate.localeCompare(b.startDate))
         }));
-    }, [visibleCourses, view]);
+    }, [filteredCoursesForList, view]);
 
     const handleLoginSuccess = (user: User) => {
         setCurrentUser(user);
@@ -227,6 +257,92 @@ const App: React.FC = () => {
             newSet.add(month);
         }
         setCollapsedMonths(newSet);
+    };
+
+    // Handle Year Change for Export Filter
+    const handleExportYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newYear = parseInt(e.target.value);
+        setExportYear(newYear);
+
+        // Update date range years while preserving month/day
+        const updateYear = (dateStr: string) => {
+            if (!dateStr) return '';
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const date = new Date(newYear, m - 1, d);
+            const yStr = date.getFullYear();
+            const mStr = String(date.getMonth() + 1).padStart(2, '0');
+            const dStr = String(date.getDate()).padStart(2, '0');
+            return `${yStr}-${mStr}-${dStr}`;
+        };
+
+        if (exportStartDate) setExportStartDate(updateYear(exportStartDate));
+        if (exportEndDate) setExportEndDate(updateYear(exportEndDate));
+    };
+
+    // Export to CSV
+    const handleExport = () => {
+        if (filteredCoursesForList.length === 0) {
+            alert('沒有可匯出的資料');
+            return;
+        }
+
+        // CSV Header (matching BatchImport format)
+        const header = '課程名稱,公司別,部門/單位,課程目的,開始日期,結束日期,時間,時數,預計人數,講師,講師單位,費用,訓練類型(內訓/外訓),受訓名單';
+
+        // Convert courses to CSV rows
+        const rows = filteredCoursesForList.map(course => {
+            const trainingType = course.trainingType === 'External' ? '外訓' : '內訓';
+            const trainees = course.trainees || '';
+            
+            return [
+                course.name || '',
+                course.company || '',
+                course.department || '',
+                course.objective || '',
+                course.startDate || '',
+                course.endDate || '',
+                course.time || '',
+                course.duration?.toString() || '0',
+                course.expectedAttendees?.toString() || '0',
+                course.instructor || '',
+                course.instructorOrg || '',
+                course.cost?.toString() || '0',
+                trainingType,
+                trainees.replace(/,/g, '|') // Convert comma to pipe for CSV compatibility
+            ].map(field => {
+                // Escape fields containing comma, quote, or newline
+                if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+                    return `"${field.replace(/"/g, '""')}"`;
+                }
+                return field;
+            }).join(',');
+        });
+
+        const csvContent = [header, ...rows].join('\n');
+        
+        // Create BOM for Excel UTF-8 support
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Generate filename with date range
+        const dateStr = exportStartDate && exportEndDate 
+            ? `${exportStartDate}_${exportEndDate}`
+            : exportStartDate 
+            ? `${exportStartDate}_`
+            : exportEndDate
+            ? `_${exportEndDate}`
+            : `${exportYear}年`;
+        
+        const typeStr = exportType !== 'All' ? (exportType === 'Internal' ? '_內訓' : '_外訓') : '';
+        link.download = `教育訓練資料_${dateStr}${typeStr}.csv`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
 
@@ -379,10 +495,92 @@ const App: React.FC = () => {
 
                     {view === 'list' && (
                         <div className="space-y-8 animate-fade-in">
-                            {visibleCourses.length === 0 ? (
+                            {/* Export Filter Section */}
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                <div className="flex flex-wrap gap-4 items-end mb-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">年度</label>
+                                        <select
+                                            value={exportYear}
+                                            onChange={handleExportYearChange}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5"
+                                        >
+                                            {Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i).map(year => (
+                                                <option key={year} value={year}>{year}年</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">課程日期起</label>
+                                        <input
+                                            type="date"
+                                            value={exportStartDate}
+                                            onChange={(e) => setExportStartDate(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center self-center pt-5 text-slate-400">~</div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">課程日期迄</label>
+                                        <input
+                                            type="date"
+                                            value={exportEndDate}
+                                            onChange={(e) => setExportEndDate(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">課程類型</label>
+                                        <select
+                                            value={exportType}
+                                            onChange={(e) => setExportType(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5"
+                                        >
+                                            <option value="All">全部類型</option>
+                                            <option value="Internal">內訓</option>
+                                            <option value="External">外訓</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="ml-auto flex items-center gap-3">
+                                        <span className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded border border-slate-100">
+                                            篩選後：{filteredCoursesForList.length} 筆資料
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={handleExport}
+                                            disabled={filteredCoursesForList.length === 0}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-md transition-all font-medium text-sm ${
+                                                filteredCoursesForList.length > 0
+                                                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 15 17 10" />
+                                                <line x1="12" x2="12" y1="15" y2="3" />
+                                            </svg>
+                                            匯出資料
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {filteredCoursesForList.length === 0 ? (
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center text-slate-400">
-                                    尚無可顯示的課程資料。
-                                    {courses.length > 0 && <span className="block text-xs mt-1">（您沒有權限查看現有的課程）</span>}
+                                    {visibleCourses.length === 0 ? (
+                                        <>
+                                            尚無可顯示的課程資料。
+                                            {courses.length > 0 && <span className="block text-xs mt-1">（您沒有權限查看現有的課程）</span>}
+                                        </>
+                                    ) : (
+                                        '沒有符合篩選條件的課程資料。'
+                                    )}
                                 </div>
                             ) : (
                                 groupedCourses.map(group => (
