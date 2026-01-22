@@ -30,6 +30,7 @@ export const UserManagement: React.FC = () => {
             name: '',
             role: 'GeneralUser',
             permissions: [],
+            email: '', // Initialize email
             mustChangePassword: true // Default to true for new users
         };
         setCurrentUser(newUser);
@@ -167,6 +168,16 @@ export const UserManagement: React.FC = () => {
                         />
                     </div>
                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                        <input
+                            type="email"
+                            value={currentUser.email || ''}
+                            onChange={e => setCurrentUser({ ...currentUser, email: e.target.value })}
+                            className="w-full p-2 border border-slate-600 rounded-lg bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none"
+                            placeholder="user@example.com"
+                        />
+                    </div>
+                    <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">系統角色</label>
                         <select
                             value={currentUser.role}
@@ -301,6 +312,7 @@ export const UserManagement: React.FC = () => {
                                 <td className="p-4">
                                     <div className="font-bold text-slate-800">{user.username}</div>
                                     <div className="text-slate-500">{user.name}</div>
+                                    <div className="text-slate-400 text-xs">{user.email || ''}</div>
                                 </td>
                                 <td className="p-4">
                                     <span className={`px-2 py-1 rounded text-xs font-medium ${user.role === 'SystemAdmin' ? 'bg-purple-50 text-purple-700' :
