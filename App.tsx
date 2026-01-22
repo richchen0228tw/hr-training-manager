@@ -95,8 +95,8 @@ const App: React.FC = () => {
             groups[monthKey].push(course);
         });
 
-        // Sort months ascending
-        const sortedMonths = Object.keys(groups).sort();
+        // Sort months descending (New -> Old)
+        const sortedMonths = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
         return sortedMonths.map(month => ({
             month,
