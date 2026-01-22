@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { login, fetchUsers, saveUsers } from '../services/dataService';
 import { User } from '../types';
@@ -12,29 +11,45 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showForgot, setShowForgot] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // 新增 Loading 狀態
 
   // Forgot Password States
   const [forgotUsername, setForgotUsername] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // --- 修改 1: 登入邏輯改成 Async/Await ---
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = login(username, password);
-    if (user) {
-      onLoginSuccess(user);
-    } else {
-      setError('帳號或密碼錯誤');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      // 等待雲端驗證
+      const user = await login(username, password);
+
+      if (user) {
+        onLoginSuccess(user);
+      } else {
+        setError('帳號或密碼錯誤');
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError('登入時發生錯誤，請檢查網路連線');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleForgotPassword = (e: React.FormEvent) => {
+  // --- 修改 2: 忘記密碼邏輯改成 Async/Await ---
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsResetting(true);
     setForgotMessage('');
 
-    setTimeout(() => {
-      const allUsers = fetchUsers();
+    try {
+      // 從雲端抓取最新使用者列表
+      const allUsers = await fetchUsers();
       const targetUser = allUsers.find(u => u.username === forgotUsername);
 
       if (targetUser) {
@@ -45,13 +60,20 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           }
           return u;
         });
-        saveUsers(updatedUsers);
+
+        // 等待寫入雲端
+        await saveUsers(updatedUsers);
+
         setForgotMessage(`✅ 已發送重置信件！\n為了方便測試，密碼已重置為「123」。\n請使用新密碼登入並修改。`);
       } else {
         setForgotMessage('❌ 找不到此帳號，請確認輸入是否正確。');
       }
+    } catch (err) {
+      console.error("Reset password error:", err);
+      setForgotMessage('❌ 重置失敗，請稍後再試。');
+    } finally {
       setIsResetting(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -75,6 +97,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               className="w-full px-4 py-2 rounded-lg border border-slate-600 bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
               placeholder="請輸入帳號"
               required
+              disabled={isLoading}
             />
           </div>
 
@@ -87,6 +110,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               className="w-full px-4 py-2 rounded-lg border border-slate-600 bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
               placeholder="請輸入密碼"
               required
+              disabled={isLoading}
             />
           </div>
 
@@ -95,6 +119,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               type="button"
               onClick={() => { setShowForgot(true); setForgotMessage(''); setForgotUsername(''); }}
               className="text-xs text-primary-600 hover:text-primary-800 hover:underline"
+              disabled={isLoading}
             >
               忘記密碼？
             </button>
@@ -104,13 +129,20 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
           <button
             type="submit"
-            className="w-full py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium shadow-md transition-all active:scale-95"
+            disabled={isLoading}
+            className="w-full py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed text-white rounded-lg font-medium shadow-md transition-all active:scale-95 flex justify-center items-center gap-2"
           >
-            登入
+            {isLoading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                登入中...
+              </>
+            ) : '登入'}
           </button>
         </form>
-
-
       </div>
 
       {/* Forgot Password Modal */}
@@ -134,13 +166,22 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-amber-500 outline-none"
                   placeholder="請輸入帳號"
                   required
+                  disabled={isResetting}
                 />
                 <button
                   type="submit"
                   disabled={isResetting}
-                  className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                  className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  {isResetting ? '處理中...' : '重置密碼'}
+                  {isResetting ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      處理中...
+                    </>
+                  ) : '重置密碼'}
                 </button>
               </form>
             ) : (
@@ -158,6 +199,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <button
               onClick={() => setShowForgot(false)}
               className="w-full py-2 mt-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
+              disabled={isResetting}
             >
               {forgotMessage.includes('✅') ? '返回登入' : '取消'}
             </button>
