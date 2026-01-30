@@ -148,6 +148,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 rounded-lg border border-slate-600 bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
               placeholder="請輸入帳號"
+              autoComplete="username"
               required
               disabled={isLoading}
             />
@@ -161,6 +162,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 rounded-lg border border-slate-600 bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
               placeholder="請輸入密碼"
+              autoComplete="current-password"
               required
               disabled={isLoading}
             />
